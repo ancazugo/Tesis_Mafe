@@ -1,0 +1,157 @@
+---
+title: "Analisis de Secuencias"
+author: "Maria Fernanda Zuñiga Gonzalez"
+date: "30/11/2020"
+output: html_document
+---
+```{r}
+library(sangerseqR)
+library(sangeranalyseR)
+library(tidyverse)
+library(readxl)
+library(FactoMineR)
+library(factoextra)
+library(vegan)
+```
+
+```{r}
+example1 <- readsangerseq('daniados/17R_12SF1MT.ab1')
+```
+
+```{r}
+contigName <- "17R_12S"
+suffixForwardRegExp <- "_12SF1MT.ab1$"
+suffixReverseRegExp <- "_12SR1MT.ab1$"
+
+sangerContig <- SangerContig(parentDirectory = 'daniados/', suffixForwardRegExp = suffixForwardRegExp, suffixReverseRegExp = suffixReverseRegExp)
+
+writeFastaSC(sangerContig, outputDir = '.')
+```
+
+```{r}
+sangerAlignment <- 
+        SangerAlignment(parentDirectory = 'daniados/',
+                        suffixForwardRegExp = suffixForwardRegExp,
+                        suffixReverseRegExp = suffixReverseRegExp,)
+writeFastaSA(sangerAlignment, outputDir = '.')
+```
+
+## Analisis estadistico de la base de datos
+
+```{r}
+df <- read_xlsx('MT Base consolidada.xlsx', sheet = 1, na = 'NA')
+df$W <- as.numeric(df$W)
+df$N <- as.numeric(df$N)
+df$Presencia_trypanosoma <- as.numeric(df$Presencia_trypanosoma)
+```
+
+```{r}
+df_MCA <- df %>%
+    filter(Presencia_trypanosoma == 1, Organismos == 'Murcielago')
+nombresMuestras <- df_MCA$`Nombre muestra`
+df_MCA <- df_MCA[c(5, 9, 11:18)]
+
+df_dieta <- df_MCA[c(3:6)] %>%
+    summarise_all(funs(sum)) %>%
+    pivot_longer(cols = everything(), names_to = 'Dieta', values_to = 'Cantidad')
+
+df_habitat <- df_MCA[c(7:10)] %>%
+    summarise_all(funs(sum)) %>%
+    pivot_longer(cols = everything(), names_to = 'Habitat', values_to = 'Cantidad')
+
+df_MCA$Sitio_de_colecta <- as.factor(df_MCA$Sitio_de_colecta)
+df_MCA$Especie_12S <- as.factor(df_MCA$Especie_12S)
+df_MCA$Insectivoro <- as.factor(df_MCA$Insectivoro)
+df_MCA$Nectarivoro <- as.factor(df_MCA$Nectarivoro)
+df_MCA$Fructifero <- as.factor(df_MCA$Fructifero)
+df_MCA$Carnivoro <- as.factor(df_MCA$Carnivoro)
+df_MCA$Silvestre <- as.factor(df_MCA$Silvestre)
+df_MCA$Rural <- as.factor(df_MCA$Rural)
+df_MCA$Urbano <- as.factor(df_MCA$Urbano)
+df_MCA$Urban_no_habitado <- as.factor(df_MCA$Urban_no_habitado)
+```
+
+```{r}
+ggplot(df_dieta, aes(x = Dieta, y = Cantidad, fill = Dieta)) + 
+    geom_bar(stat = 'identity') + 
+    scale_fill_brewer(type = 'qual', palette = 1) +
+    theme_classic()
+```
+```{r}
+ggplot(df_habitat, aes(x = Habitat, y = Cantidad, fill = Habitat)) + 
+    geom_bar(stat = 'identity') + 
+    scale_fill_brewer(type = 'qual', palette = 2) +
+    theme_classic()
+```
+
+```{r}
+res.mca <- MCA(df_MCA, ncp = 3, graph = FALSE)
+```
+
+```{r}
+eig.val <- get_eigenvalue(res.mca)
+fviz_screeplot(res.mca, addlabels = TRUE, ylim = c(0, 45), ggtheme = theme_classic())
+```
+
+```{r}
+fviz_mca_biplot(res.mca, repel = TRUE, ggtheme = theme_minimal())
+```
+```{r}
+fviz_mca_var(res.mca, choice = "mca.cor", 
+            repel = TRUE, # Avoid text overlapping (slow)
+            ggtheme = theme_minimal())
+```
+
+```{r}
+fviz_mca_ind(res.mca, 
+             label = "none", # hide individual labels
+             habillage = "Especie_12S", # color by groups 
+             palette = c("Paired"),
+             ggtheme = theme_minimal()) 
+```
+
+
+## Analisis de Diversidad
+```{r}
+df_conteo <- df_MCA %>%
+    select(Sitio_de_colecta, Especie_12S) %>%
+    group_by(Sitio_de_colecta, Especie_12S) %>%
+    count(name = 'Conteo', ) %>%
+    pivot_wider(names_from = Especie_12S, values_from = Conteo) %>%
+    replace_na(list(`Myotis brandtii` = 0, `Carollia perspicillata` = 0, `Glossophaga soricina` = 0, `Micronycteris brachyotis` = 0, `Anoura caudifer` = 0, `Phyllostomus hastatus` = 0, `Saccopteryx leptura` = 0, `Carollia brevicauda` = 0, `Vampyrum spectrum` = 0))
+
+alfa1 <- diversity(df_conteo[-1], index = 'shannon')
+beta1 <- betadiver(df_conteo[-1], method = 1)
+```
+
+```{r}
+data_frame(Sitio_de_colecta = df_conteo$Sitio_de_colecta, alfa = alfa1) %>%
+ggplot(aes(y = Sitio_de_colecta, x = alfa1, fill = Sitio_de_colecta)) +
+    geom_bar(stat = 'identity') + 
+    scale_fill_brewer(type = 'qual', palette = 4) +
+    labs(y = 'Sitio de Colecta', fill = 'Sitio de Colecta', x = 'Diversidad Alfa (Shannon)') +
+    theme_classic()
+```
+
+
+```{r}
+df_conteo2 <- df_MCA %>%
+    mutate(sitio_cat = recode(Sitio_de_colecta, `Belgrado (Maní)`='Mani', `Cruz Verde (Tamara)`='Tamara', `Cueva guacharos (Aguazul)`='Aguazul', `Curama (pore)`='Pore', `La Graciela (Aguazul)`='Aguazul', `La niata (yopal)`='Yopal', `Ramon Nonato (Pore)`='Pore', `San Isidro (Pore)`='Pore')) %>%
+    select(sitio_cat, Especie_12S) %>%
+    group_by(sitio_cat, Especie_12S) %>%
+    count(name = 'Conteo') %>%
+    pivot_wider(names_from = Especie_12S, values_from = Conteo) %>%
+    replace_na(list(`Myotis brandtii` = 0, `Carollia perspicillata` = 0, `Glossophaga soricina` = 0, `Micronycteris brachyotis` = 0, `Anoura caudifer` = 0, `Phyllostomus hastatus` = 0, `Saccopteryx leptura` = 0, `Carollia brevicauda` = 0, `Vampyrum spectrum` = 0))
+
+alfa2 <- diversity(df_conteo2[-1], index = 'shannon')
+beta2 <- betadiver(df_conteo2[-1], )
+```
+
+```{r}
+data_frame(sitio_cat = df_conteo2$sitio_cat, alfa = alfa2) %>%
+ggplot(aes(y = sitio_cat, x = alfa2, fill = sitio_cat)) +
+    geom_bar(stat = 'identity') + 
+    scale_fill_brewer(type = 'qual', palette = 5) +
+    labs(y = 'Municipio', fill = 'Municipio', x = 'Diversidad Alfa (Shannon)') +
+    theme_classic()
+```
