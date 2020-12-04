@@ -94,12 +94,12 @@ fviz_screeplot(res.mca, addlabels = TRUE, ylim = c(0, 45), ggtheme = theme_class
 ```
 
 ```{r}
-fviz_mca_biplot(res.mca, repel = TRUE, ggtheme = theme_minimal())
+fviz_mca_biplot(res.mca, repel = TRUE, ggtheme = theme_classic())
 ```
 ```{r}
 fviz_mca_var(res.mca, choice = "mca.cor", 
             repel = TRUE, # Avoid text overlapping (slow)
-            ggtheme = theme_minimal())
+            ggtheme = theme_classic())
 ```
 
 ```{r}
@@ -107,7 +107,7 @@ fviz_mca_ind(res.mca,
              label = "none", # hide individual labels
              habillage = "Especie_12S", # color by groups 
              palette = c("Paired"),
-             ggtheme = theme_minimal()) 
+             ggtheme = theme_classic()) 
 ```
 
 
