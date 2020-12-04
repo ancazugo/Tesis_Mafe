@@ -2,8 +2,9 @@
 .Rhistory
 .RData
 .Ruserdata
+Tesis_Mafe.Rproj
 /AB!/*
 /Daniados/*
-/.ipynb_checkpoints/*
-MT Base consolidada.xlsx
+.ipynb_checkpoints/*
+*.xlsx
 *.fa
