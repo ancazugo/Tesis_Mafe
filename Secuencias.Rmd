@@ -9,6 +9,7 @@ library(sangerseqR)
 library(sangeranalyseR)
 library(tidyverse)
 library(ggrepel) #Ggplot2 labels
+library(RColorBrewer)
 library(readxl)
 library(FactoMineR)
 library(factoextra)
@@ -40,10 +41,11 @@ writeFastaSA(sangerAlignment, outputDir = '.')
 ## Analisis estadistico de la base de datos
 
 ```{r}
-df <- read_xlsx('MT_base_final.xlsx', sheet = 1, na = 'NA')
+df <- read_xlsx('MT_base_final.xlsx', sheet = 1, na = 'NA') %>%
+    mutate(sitio_cat = recode(Sitio_de_colecta, `Belgrado (Maní)`='Mani', `Cruz Verde (Tamara)`='Tamara', `Cueva guacharos (Aguazul)`='Aguazul', `Curama (Pore)`='Pore', `La Graciela (Aguazul)`='Aguazul', `La niata (Yopal)`='Yopal', `Ramon Nonato (Pore)`='Pore', `San Isidro (Pore)`='Pore'))
 
 df_MCA <- df %>%
-    filter(Organismos == 'Murcielago', Infeccion != 'Ninguno', Especie_12S != 'Chiroptera')
+    filter(Organismos == 'Murcielago', Infeccion != 'Ninguno', Especie_12S != 'Chiroptera') 
 
 nombresMuestras <- df_MCA$`Nombre muestra`
 infeccion <- df_MCA$Infeccion
@@ -57,7 +59,7 @@ df_dieta_long <- df_MCA[c(11, 13:16)] %>%
     pivot_longer(cols = Insectivoro:Carnivoro, names_to = "Dieta") %>%
     filter(value != 0) %>%
     group_by(Especie_12S, Dieta) %>%
-    count()
+    count(name = 'Cantidad')
     
 df_habitat <- df_MCA[c(17:20)] %>%
     summarise_if(is.numeric, sum, na.rm = TRUE) %>% 
@@ -67,7 +69,7 @@ df_habitat_long <- df_MCA[c(11, 17:20)] %>%
     pivot_longer(cols = Silvestre:Urban_no_habitado, names_to = "Habitat") %>%
     filter(value != 0) %>%
     group_by(Especie_12S, Habitat) %>%
-    count()
+    count(name = 'Cantidad')
 
 df_MCA$Sitio_de_colecta <- as.factor(df_MCA$Sitio_de_colecta)
 df_MCA$Especie_12S <- as.factor(df_MCA$Especie_12S)
@@ -135,9 +137,10 @@ ggplot(df_MCA_dim, aes(x = `Dim 1`, y = `Dim 2`, color = especies, shape = infec
 ```
 
 ```{r}
-ggplot(df_MCA, aes(y = Especie_12S, fill = infeccion)) +
-    geom_bar(stat = 'count') +
-    scale_fill_brewer(type = 'qual',palette = 'Dark2') +
+ggplot(df %>% filter(Organismos == 'Murcielago', Infeccion != 'Ninguno'), aes(y = Especie_12S, fill = Infeccion)) +
+    geom_bar(stat = 'count', position = position_dodge()) +
+    scale_x_continuous(breaks = seq(0, 14, 2)) +
+    scale_fill_brewer(type = 'qual',palette = 'Pastel1') +
     labs(x = 'Cantidad', y = 'Especie', fill = 'Parásito(s)') +
     facet_wrap(~Sitio_de_colecta, nrow = 2, scales = 'free_y') +
     theme_classic() +
@@ -149,14 +152,69 @@ ggplot(df_MCA, aes(y = Especie_12S, fill = infeccion)) +
           legend.title = element_text(face = 'bold', size = 15),
           legend.text = element_text(face = 'italic', size = 13),
           legend.position = 'bottom')
-    
 ```
 
 ```{r}
-df_MCA_long_dieta <- df_MCA %>%
-    pivot_longer()
+ggplot(df %>% filter(Organismos == 'Murcielago', Infeccion != 'Ninguno'), aes(y = Especie_12S, fill = Infeccion)) +
+    geom_bar(stat = 'count', position = position_dodge()) +
+    scale_x_continuous(breaks = seq(0, 14, 2)) +
+    scale_fill_brewer(type = 'qual',palette = 'Pastel1') +
+    labs(x = 'Cantidad', y = 'Especie', fill = 'Parásito(s)') +
+    facet_wrap(~sitio_cat, nrow = 2, scales = 'free_y') +
+    theme_classic() +
+    theme(axis.title = element_text(face = 'bold', size = 20),
+          axis.text = element_text(size = 15, hjust = 0),
+          axis.text.y = element_text(face = 'italic'),
+          strip.text = element_text(face = 'bold', size = 13),
+          strip.background = element_blank(),
+          legend.title = element_text(face = 'bold', size = 15),
+          legend.text = element_text(face = 'italic', size = 13),
+          legend.position = 'bottom')
 ```
 
+
+```{r}
+brewerpalette <- colorRampPalette(brewer.pal(24, 'PuBu'))
+
+ggplot(df_dieta_long, aes(x = Dieta, y = Especie_12S, fill = Cantidad)) + 
+    geom_tile() + 
+    geom_text(aes(label = Cantidad), size = 7) +
+    coord_equal() +
+    theme(panel.grid = element_blank(),
+          panel.background = element_blank(),
+          plot.title = element_text(size = 20, hjust = 0.5, face = 'bold'),
+          panel.border = element_rect(color = 'black', fill = NA),
+          axis.text.y = element_text(face = 'italic', size = 15),
+          axis.text.x = element_text(angle = -25, size = 15, hjust = 0),
+          axis.title = element_blank(),
+          strip.text = element_text(size = 15),
+          strip.background = element_blank(),
+          legend.title = element_text(size = 15, vjust = 1),
+          legend.position = 'bottom') +
+    scale_fill_gradientn(colours = brewerpalette(20), name = 'Cantidad', breaks = as.integer)
+```
+
+
+```{r}
+brewerpalette <- colorRampPalette(brewer.pal(24, 'Greens'))
+
+ggplot(df_habitat_long, aes(x = Habitat, y = Especie_12S, fill = Cantidad)) + 
+    geom_tile() + 
+    geom_text(aes(label = Cantidad), size = 7) +
+    coord_equal() +
+    theme(panel.grid = element_blank(),
+          panel.background = element_blank(),
+          plot.title = element_text(size = 20, hjust = 0.5, face = 'bold'),
+          panel.border = element_rect(color = 'black', fill = NA),
+          axis.text.y = element_text(face = 'italic', size = 15),
+          axis.text.x = element_text(angle = -25, size = 15, hjust = 0),
+          axis.title = element_blank(),
+          strip.text = element_text(size = 15),
+          strip.background = element_blank(),
+          legend.title = element_text(size = 15, vjust = 1),
+          legend.position = 'bottom') +
+    scale_fill_gradientn(colours = brewerpalette(20), name = 'Cantidad', breaks = as.integer)
+```
 
 ## Analisis de Diversidad
 ```{r}
