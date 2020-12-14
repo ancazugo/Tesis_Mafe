@@ -8,6 +8,7 @@ output: html_document
 library(sangerseqR)
 library(sangeranalyseR)
 library(tidyverse)
+library(ggrepel) #Ggplot2 labels
 library(readxl)
 library(FactoMineR)
 library(factoextra)
@@ -39,25 +40,34 @@ writeFastaSA(sangerAlignment, outputDir = '.')
 ## Analisis estadistico de la base de datos
 
 ```{r}
-df <- read_xlsx('MT Base consolidada.xlsx', sheet = 1, na = 'NA')
-df$W <- as.numeric(df$W)
-df$N <- as.numeric(df$N)
-df$Presencia_trypanosoma <- as.numeric(df$Presencia_trypanosoma)
-```
+df <- read_xlsx('MT_base_final.xlsx', sheet = 1, na = 'NA')
 
-```{r}
 df_MCA <- df %>%
-    filter(Presencia_trypanosoma == 1, Organismos == 'Murcielago')
-nombresMuestras <- df_MCA$`Nombre muestra`
-df_MCA <- df_MCA[c(5, 9, 11:18)]
+    filter(Organismos == 'Murcielago', Infeccion != 'Ninguno', Especie_12S != 'Chiroptera')
 
-df_dieta <- df_MCA[c(3:6)] %>%
-    summarise_all(funs(sum)) %>%
+nombresMuestras <- df_MCA$`Nombre muestra`
+infeccion <- df_MCA$Infeccion
+especies <- df_MCA$Especie_12S
+
+df_dieta <- df_MCA[c(13:16)] %>%
+    summarise_if(is.numeric, sum, na.rm = TRUE) %>% 
     pivot_longer(cols = everything(), names_to = 'Dieta', values_to = 'Cantidad')
 
-df_habitat <- df_MCA[c(7:10)] %>%
-    summarise_all(funs(sum)) %>%
+df_dieta_long <- df_MCA[c(11, 13:16)] %>%
+    pivot_longer(cols = Insectivoro:Carnivoro, names_to = "Dieta") %>%
+    filter(value != 0) %>%
+    group_by(Especie_12S, Dieta) %>%
+    count()
+    
+df_habitat <- df_MCA[c(17:20)] %>%
+    summarise_if(is.numeric, sum, na.rm = TRUE) %>% 
     pivot_longer(cols = everything(), names_to = 'Habitat', values_to = 'Cantidad')
+
+df_habitat_long <- df_MCA[c(11, 17:20)] %>%
+    pivot_longer(cols = Silvestre:Urban_no_habitado, names_to = "Habitat") %>%
+    filter(value != 0) %>%
+    group_by(Especie_12S, Habitat) %>%
+    count()
 
 df_MCA$Sitio_de_colecta <- as.factor(df_MCA$Sitio_de_colecta)
 df_MCA$Especie_12S <- as.factor(df_MCA$Especie_12S)
@@ -69,6 +79,10 @@ df_MCA$Silvestre <- as.factor(df_MCA$Silvestre)
 df_MCA$Rural <- as.factor(df_MCA$Rural)
 df_MCA$Urbano <- as.factor(df_MCA$Urbano)
 df_MCA$Urban_no_habitado <- as.factor(df_MCA$Urban_no_habitado)
+
+# Seleccionar columnas Sitio, Especie_12S y Habitos
+# df_MCA <- df_MCA[c(5, 13:20)]
+
 ```
 
 ```{r}
@@ -85,7 +99,11 @@ ggplot(df_habitat, aes(x = Habitat, y = Cantidad, fill = Habitat)) +
 ```
 
 ```{r}
-res.mca <- MCA(df_MCA, ncp = 3, graph = FALSE)
+res.mca <- MCA(df_MCA[c(5, 13:20)], graph = FALSE)
+df_MCA_dim <- as.data.frame(get_mca_ind(res.mca = res.mca)$coord)
+df_MCA_dim$nombresMuestras <- nombresMuestras
+df_MCA_dim$infeccion <- infeccion
+df_MCA_dim$especies <- especies
 ```
 
 ```{r}
@@ -103,11 +121,40 @@ fviz_mca_var(res.mca, choice = "mca.cor",
 ```
 
 ```{r}
-fviz_mca_ind(res.mca, 
-             label = "none", # hide individual labels
-             habillage = "Especie_12S", # color by groups 
-             palette = c("Paired"),
-             ggtheme = theme_classic()) 
+ggplot(df_MCA_dim, aes(x = `Dim 1`, y = `Dim 2`, color = especies, shape = infeccion, label = nombresMuestras)) + 
+    geom_point(alpha = 0.5, size = 5) +
+    geom_text_repel(force = 5, size = 5, show.legend = F) +
+    scale_color_manual(values = c('#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', '#959c17', '#a65628', '#f781bf', '#999999')) +
+    labs(x = 'Dim 1 (33.2%)', y = 'Dim 2 (17.3%)', color = 'Especie', shape = 'Parásito(s)') +
+    theme_classic() +
+    theme(axis.title = element_text(face = 'bold', size = 20),
+          axis.text = element_text(size = 15),
+          legend.title = element_text(face = 'bold', size = 15),
+          legend.text = element_text(face = 'italic', size = 13),
+          legend.position = 'bottom')
+```
+
+```{r}
+ggplot(df_MCA, aes(y = Especie_12S, fill = infeccion)) +
+    geom_bar(stat = 'count') +
+    scale_fill_brewer(type = 'qual',palette = 'Dark2') +
+    labs(x = 'Cantidad', y = 'Especie', fill = 'Parásito(s)') +
+    facet_wrap(~Sitio_de_colecta, nrow = 2, scales = 'free_y') +
+    theme_classic() +
+    theme(axis.title = element_text(face = 'bold', size = 20),
+          axis.text = element_text(size = 15, hjust = 0),
+          axis.text.y = element_text(face = 'italic'),
+          strip.text = element_text(face = 'bold', size = 13),
+          strip.background = element_blank(),
+          legend.title = element_text(face = 'bold', size = 15),
+          legend.text = element_text(face = 'italic', size = 13),
+          legend.position = 'bottom')
+    
+```
+
+```{r}
+df_MCA_long_dieta <- df_MCA %>%
+    pivot_longer()
 ```
 
 
